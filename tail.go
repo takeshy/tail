@@ -42,6 +42,7 @@ func (t *Tail) openFile() {
 		t.file.Close()
 	}
 	t.file = file
+	t.read()
 	return
 }
 
