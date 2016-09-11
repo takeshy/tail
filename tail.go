@@ -2,26 +2,20 @@ package tail
 
 import (
 	"bufio"
+	"github.com/go-fsnotify/fsnotify"
 	"log"
 	"os"
-	"time"
-	"github.com/go-fsnotify/fsnotify"
+	"path"
 )
 
 type Tail struct {
-	path	string
+	path    string
 	watcher *fsnotify.Watcher
-	file	*os.File
-	mTime	time.Time
-	c		chan string
+	file    *os.File
+	c       chan string
 }
 
 func (t *Tail) read() {
-	fi, err := t.file.Stat()
-	if err != nil {
-		log.Fatal(err)
-	}
-	t.mTime = fi.ModTime()
 	s := bufio.NewScanner(t.file)
 	for s.Scan() {
 		t.c <- s.Text()
@@ -29,28 +23,29 @@ func (t *Tail) read() {
 	return
 }
 
-func (t *Tail) waitOpenFile() {
-	for {
-		if err := t.watcher.Add(t.path); err != nil {
-			time.Sleep(time.Second)
-		} else {
-			file, err := os.Open(t.path)
-			if err != nil {
-				log.Fatal(err);
-			}
-			if t.file != nil {
-				t.file.Close()
-				t.file = file
-			} else {
-				file.Seek(0, os.SEEK_END)
-				t.file = file
-			}
-			return
-		}
+func (t *Tail) openFileAndSeekEnd() {
+	file, err := os.Open(t.path)
+	if err != nil {
+		return
 	}
+	file.Seek(0, os.SEEK_END)
+	t.file = file
 }
 
-func Watch(path string) chan string {
+func (t *Tail) openFile() {
+	file, err := os.Open(t.path)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	if t.file != nil {
+		t.file.Close()
+	}
+	t.file = file
+	return
+}
+
+func Watch(filePath string) chan string {
 	t := new(Tail)
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -58,8 +53,11 @@ func Watch(path string) chan string {
 	}
 	c := make(chan string)
 	t.watcher = watcher
-	t.path = path
-	t.waitOpenFile()
+	t.path = filePath
+	if err = t.watcher.Add(path.Dir(t.path)); err != nil {
+		log.Fatal(err)
+	}
+	t.openFileAndSeekEnd()
 	t.c = c
 	go func() {
 		defer t.watcher.Close()
@@ -68,19 +66,12 @@ func Watch(path string) chan string {
 			case event := <-t.watcher.Events:
 				switch {
 				case event.Op&fsnotify.Write == fsnotify.Write:
-					t.read()
-				case event.Op&fsnotify.Remove == fsnotify.Remove:
-					t.waitOpenFile()
-					t.read()
-				default:
-					fi, err := t.file.Stat()
-					if err != nil {
-						log.Fatal(err)
-					}
-					mTime := fi.ModTime()
-					if mTime.After(t.mTime) {
-						t.waitOpenFile()
+					if path.Base(t.path) == path.Base(event.Name) {
 						t.read()
+					}
+				case event.Op&fsnotify.Create == fsnotify.Create:
+					if path.Base(t.path) == path.Base(event.Name) {
+						t.openFile()
 					}
 				}
 			case err := <-watcher.Errors:

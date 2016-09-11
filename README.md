@@ -13,7 +13,7 @@ func main(){
   for {
     select {
     case s := <-c:
-      fmt.Println(string(s))
+      fmt.Println(s)
     }
   }
 }
