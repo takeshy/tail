@@ -9,13 +9,27 @@ import (
 )
 
 type Tail struct {
-	path    string
-	watcher *fsnotify.Watcher
-	file    *os.File
-	c       chan string
+	path       string
+	watcher    *fsnotify.Watcher
+	file       *os.File
+	beforeSize int64
+	c          chan string
+}
+
+func (t *Tail) size() int64 {
+	fileInfo, err := t.file.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return fileInfo.Size()
 }
 
 func (t *Tail) read() {
+	size := t.size()
+	if size < t.beforeSize {
+		t.file.Seek(0, os.SEEK_SET)
+	}
+	t.beforeSize = size
 	s := bufio.NewScanner(t.file)
 	for s.Scan() {
 		t.c <- s.Text()
@@ -26,17 +40,17 @@ func (t *Tail) read() {
 func (t *Tail) openFileAndSeekEnd() {
 	file, err := os.Open(t.path)
 	if err != nil {
-		return
+		log.Fatal(err)
 	}
 	file.Seek(0, os.SEEK_END)
 	t.file = file
+	t.beforeSize = t.size()
 }
 
 func (t *Tail) openFile() {
 	file, err := os.Open(t.path)
 	if err != nil {
 		log.Fatal(err)
-		return
 	}
 	if t.file != nil {
 		t.file.Close()
