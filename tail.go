@@ -40,7 +40,7 @@ func (t *Tail) read() {
 func (t *Tail) openFileAndSeekEnd() {
 	file, err := os.Open(t.path)
 	if err != nil {
-		log.Fatal(err)
+		return
 	}
 	file.Seek(0, os.SEEK_END)
 	t.file = file
