@@ -2,7 +2,7 @@ package tail
 
 import (
 	"bufio"
-	"github.com/go-fsnotify/fsnotify"
+	"github.com/fsnotify/fsnotify"
 	"log"
 	"os"
 	"path"
